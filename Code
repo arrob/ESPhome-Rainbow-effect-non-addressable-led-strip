@@ -1,0 +1,465 @@
+esphome:
+  name: chris-led
+  friendly_name: Chris led
+
+esp8266:
+  board: d1_mini
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+
+ota:
+  - platform: esphome
+
+
+wifi:
+  networks:
+  - ssid: xxxxxxxxx
+    password: xxxxxxxxxxx
+  
+  manual_ip:
+    static_ip: 192.168.0.188
+    gateway: 192.168.0.1
+    subnet: 255.255.255.0
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Chris-Led Fallback Hotspot"
+    password: xxxxxxxxxxxxxx
+
+captive_portal:
+
+# Declare global variable to store the brightness level
+globals:
+  - id: brightness_level
+    type: int
+    restore_value: no  # Do not restore value after restart
+    initial_value: '30'
+
+  - id: rainbow_running
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+    
+  - id: rainbow_running_50
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+    
+  - id: rainbow_running_75
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+
+
+
+
+# Define the RGB lights controlled by MOSFETs
+output:
+  - platform: esp8266_pwm
+    pin: D5
+    id: output_red
+  - platform: esp8266_pwm
+    pin: D6
+    id: output_green
+  - platform: esp8266_pwm
+    pin: D7
+    id: output_blue
+  - platform: esp8266_pwm
+    pin: D2
+    id: led_output
+
+light:
+  - platform: rgb
+    restore_mode: RESTORE_DEFAULT_OFF
+    name: "RGB LED"
+    id: rgb_light
+    red: output_red
+    green: output_green
+    blue: output_blue
+  - platform: monochromatic
+    restore_mode: RESTORE_DEFAULT_OFF
+    name: "Monochrome LED"
+    output: led_output
+    id: mono_led
+
+# Define the button
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: D1
+      inverted: true
+    name: "Brightness Button"
+    filters:
+      - delayed_on: 50ms
+    on_click:
+      - min_length: 50ms
+        max_length: 1500ms
+        then:
+          - lambda: |-
+              id(brightness_level) += 10;
+              if (id(brightness_level) == 100) {
+                id(brightness_level) = 10;
+              }
+              if (id(brightness_level) > 100) {
+                id(brightness_level) = 10;
+              }
+              auto call = id(mono_led).turn_on();
+              call.set_brightness(id(brightness_level) / 100.0);
+              call.perform();
+      - min_length: 2s
+        max_length: 6s
+        then:
+          - script.execute: rgb_on_off
+
+switch:
+  - platform: template
+    name: Szivarvany
+    id: szivarvany
+    icon: "mdi:looks"
+    lambda: |-
+      return id(rainbow_running);
+    turn_on_action:
+      then:
+        - globals.set:
+            id: rainbow_running_50
+            value: 'false'
+        - globals.set:
+            id: rainbow_running_75
+            value: 'false'
+        - globals.set:
+            id: rainbow_running
+            value: 'true'
+        - script.stop: rainbow_effect_loop_50
+        - script.stop: rainbow_effect_loop_75
+        - script.execute: rainbow_effect_loop
+    turn_off_action:
+      then:
+        - globals.set:
+            id: rainbow_running
+            value: 'false'
+        - script.stop: rainbow_effect_loop
+        - light.turn_off: rgb_light
+
+  - platform: template
+    name: Szivarvany 50%
+    id: szivarvany_50
+    lambda: |-
+      return id(rainbow_running_50);
+    turn_on_action:
+      then:
+        - globals.set:
+            id: rainbow_running_75
+            value: 'false'
+        - globals.set:
+            id: rainbow_running
+            value: 'false'
+        - globals.set:
+            id: rainbow_running_50
+            value: 'true'
+        - script.stop: rainbow_effect_loop_75
+        - script.stop: rainbow_effect_loop
+        - script.execute: rainbow_effect_loop_50
+    turn_off_action:
+      then:
+        - globals.set:
+            id: rainbow_running_50
+            value: 'false'
+        - script.stop: rainbow_effect_loop_50
+        - light.turn_off: rgb_light
+        
+  - platform: template
+    name: Szivarvany 75%
+    id: szivarvany_75
+    lambda: |-
+      return id(rainbow_running_75);
+    turn_on_action:
+      then:
+        - globals.set:
+            id: rainbow_running_50
+            value: 'false'
+        - globals.set:
+            id: rainbow_running
+            value: 'false'
+        - globals.set:
+            id: rainbow_running_75
+            value: 'true'
+        - script.stop: rainbow_effect_loop_50
+        - script.stop: rainbow_effect_loop
+        - script.execute: rainbow_effect_loop_75
+    turn_off_action:
+      then:
+        - globals.set:
+            id: rainbow_running_75
+            value: 'false'
+        - script.stop: rainbow_effect_loop_75
+        - light.turn_off: rgb_light
+
+
+web_server:
+  port: 8080
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: ESP IP Address
+    ssid:
+      name: ESP Connected SSID
+    bssid:
+      name: ESP Connected BSSID
+    mac_address:
+      name: ESP Mac Wifi Address
+    scan_results:
+      name: ESP Latest Scan Results
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi jel Chris iroasztal"
+    update_interval: 600s
+
+
+script:
+  - id: rainbow_effect_loop
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: 'return true;'
+          then:
+            # Roșu
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 100%
+                green: 0%
+                blue: 0%
+                brightness: 30%
+            - delay: 5s
+
+            # Portocaliu
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 100%
+                green: 50%
+                blue: 0%
+                brightness: 30%
+            - delay: 5s
+
+            # Galben
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 100%
+                green: 100%
+                blue: 0%
+                brightness: 30%
+            - delay: 5s
+
+            # Verde
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 0%
+                green: 100%
+                blue: 0%
+                brightness: 30%
+            - delay: 5s
+
+            # Albastru
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 0%
+                green: 0%
+                blue: 100%
+                brightness: 30%
+            - delay: 5s
+
+            # Indigo
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 29%
+                green: 0%
+                blue: 51%
+                brightness: 30%
+            - delay: 5s
+
+            # Violet
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 58%
+                green: 0%
+                blue: 83%
+                brightness: 30%
+            - delay: 5s
+  - id: rainbow_effect_loop_50
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: 'return true;'
+          then:
+            # Roșu
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 100%
+                green: 0%
+                blue: 0%
+                brightness: 50%
+            - delay: 5s
+
+            # Portocaliu
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 100%
+                green: 50%
+                blue: 0%
+                brightness: 50%
+            - delay: 5s
+
+            # Galben
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 100%
+                green: 100%
+                blue: 0%
+                brightness: 50%
+            - delay: 5s
+
+            # Verde
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 0%
+                green: 100%
+                blue: 0%
+                brightness: 50%
+            - delay: 5s
+
+            # Albastru
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 0%
+                green: 0%
+                blue: 100%
+                brightness: 50%
+            - delay: 5s
+
+            # Indigo
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 29%
+                green: 0%
+                blue: 51%
+                brightness: 50%
+            - delay: 5s
+
+            # Violet
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 58%
+                green: 0%
+                blue: 83%
+                brightness: 50%
+            - delay: 5s
+  - id: rainbow_effect_loop_75
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: 'return true;'
+          then:
+            # Roșu
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 100%
+                green: 0%
+                blue: 0%
+                brightness: 75%
+            - delay: 5s
+
+            # Portocaliu
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 100%
+                green: 50%
+                blue: 0%
+                brightness: 75%
+            - delay: 5s
+
+            # Galben
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 100%
+                green: 100%
+                blue: 0%
+                brightness: 75%
+            - delay: 5s
+
+            # Verde
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 0%
+                green: 100%
+                blue: 0%
+                brightness: 75%
+            - delay: 5s
+
+            # Albastru
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 0%
+                green: 0%
+                blue: 100%
+                brightness: 75%
+            - delay: 5s
+
+            # Indigo
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 29%
+                green: 0%
+                blue: 51%
+                brightness: 75%
+            - delay: 5s
+
+            # Violet
+            - light.turn_on:
+                id: rgb_light
+                transition_length: 5s
+                red: 58%
+                green: 0%
+                blue: 83%
+                brightness: 75%
+            - delay: 5s
+  - id: rgb_on_off
+    then:
+      - if:
+          condition:
+            script.is_running: rainbow_effect_loop
+          then:
+            - script.stop: rainbow_effect_loop
+            - light.turn_off: rgb_light
+          else:
+            - script.execute: rainbow_effect_loop
+
