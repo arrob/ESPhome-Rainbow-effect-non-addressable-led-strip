@@ -1,1 +1,3 @@
 # ESPhome-Rainbow-effect-non-addressable-led-strip
+
+Hello, my son asked me to make a desk lamp with variable light intensity, and he also wanted a colored LED behind the desk and monitor that changes colors with a Rainbow effect when his computer starts up. So, I looked through my drawers and found a non-addressable RGB LED strip, and since he already had a pretty strong LED strip installed to light up the desk, I thought of integrating that LED as well. So, I wrote a program in ESPhome, connected some N-type MOSFETs to control the LED strip for lighting and 3 pieces for the RGB strip, which has a common +12v pin and 3 pins for controlling the RGB channels.
